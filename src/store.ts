@@ -5,9 +5,11 @@ import { seedUsers, seedEvents, seedComments } from "./seed";
 import { config } from "./config";
 
 /**
- * Простое хранилище данных: всё в памяти + опциональный снапшот в data/db.json.
- * Слой намеренно изолирован — заменить на Postgres/Prisma можно, переписав
- * только этот файл, не трогая роуты.
+ * Хранилище данных: всё в памяти, а персист — в одном из режимов:
+ *   - PostgreSQL (если задан DATABASE_URL) — JSONB-снапшот, переживает рестарты;
+ *   - JSON-файл data/db.json (локально, если PERSIST!=false);
+ *   - чистый in-memory (иначе).
+ * Слой изолирован: роуты работают с массивами db.*, не зная о бэкенде хранения.
  */
 export interface DB {
   users: User[];
@@ -26,25 +28,64 @@ function freshSeed(): DB {
   };
 }
 
-function loadInitial(): DB {
-  if (config.persist && fs.existsSync(DB_FILE)) {
-    try {
-      const parsed = JSON.parse(fs.readFileSync(DB_FILE, "utf-8")) as DB;
-      console.log(`[store] загружены данные из ${DB_FILE}`);
-      return parsed;
-    } catch (err) {
-      console.warn("[store] не удалось прочитать db.json, пересев данных:", err);
-    }
-  }
-  return freshSeed();
+// Стартуем с засеянного состояния; initStore() может заменить его данными из БД/файла.
+export const db: DB = freshSeed();
+
+function replaceDb(next: Partial<DB>): void {
+  db.users = next.users ?? [];
+  db.events = next.events ?? [];
+  db.comments = next.comments ?? [];
 }
 
-export const db: DB = loadInitial();
+let usePg = false;
+
+/**
+ * Асинхронная инициализация хранилища. Вызывать ДО app.listen().
+ * Порядок: PostgreSQL → JSON-файл → in-memory seed.
+ */
+export async function initStore(): Promise<void> {
+  if (config.databaseUrl) {
+    const { ensureSchema, loadSnapshot, saveSnapshot } = await import("./db/pg");
+    await ensureSchema();
+    const snap = await loadSnapshot();
+    if (snap) {
+      replaceDb(snap);
+      console.log("[store] данные загружены из PostgreSQL");
+    } else {
+      await saveSnapshot(db); // первый запуск — сохраняем seed
+      console.log("[store] PostgreSQL пуст — засеяно демо-данными");
+    }
+    usePg = true;
+    return;
+  }
+
+  if (config.persist && fs.existsSync(DB_FILE)) {
+    try {
+      replaceDb(JSON.parse(fs.readFileSync(DB_FILE, "utf-8")));
+      console.log(`[store] данные загружены из ${DB_FILE}`);
+    } catch (err) {
+      console.warn("[store] db.json повреждён, использую seed:", err);
+    }
+  }
+}
 
 let saveTimer: NodeJS.Timeout | null = null;
 
-/** Дебаунс-запись снапшота на диск (no-op при PERSIST=false). */
+/** Дебаунс-сохранение текущего состояния (Postgres или JSON-файл; no-op для чистого in-memory). */
 export function save(): void {
+  if (usePg) {
+    if (saveTimer) clearTimeout(saveTimer);
+    saveTimer = setTimeout(async () => {
+      try {
+        const { saveSnapshot } = await import("./db/pg");
+        await saveSnapshot(db);
+      } catch (err) {
+        console.error("[store] ошибка записи в PostgreSQL:", err);
+      }
+    }, 200);
+    return;
+  }
+
   if (!config.persist) return;
   if (saveTimer) clearTimeout(saveTimer);
   saveTimer = setTimeout(() => {

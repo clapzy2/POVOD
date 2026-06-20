@@ -14,4 +14,6 @@ export const config = {
   /** Защищённый ключ VK-приложения. Если пусто — подпись launch-параметров НЕ проверяется (дев-режим). */
   vkAppSecret: process.env.VK_APP_SECRET || "",
   vkAppId: process.env.VK_APP_ID || "",
+  /** Строка подключения к PostgreSQL. Если задана — данные хранятся в БД; иначе in-memory/JSON. */
+  databaseUrl: process.env.DATABASE_URL || "",
 } as const;
