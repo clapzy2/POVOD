@@ -11,4 +11,7 @@ export const config = {
   corsOrigin: process.env.CORS_ORIGIN || "*",
   serviceName: process.env.SERVICE_NAME || "povod-backend",
   nodeEnv: process.env.NODE_ENV || "development",
+  /** Защищённый ключ VK-приложения. Если пусто — подпись launch-параметров НЕ проверяется (дев-режим). */
+  vkAppSecret: process.env.VK_APP_SECRET || "",
+  vkAppId: process.env.VK_APP_ID || "",
 } as const;

@@ -1,3 +1,4 @@
+import "dotenv/config"; // должен идти первым: загружает .env в process.env до чтения конфига
 import { createApp } from "./app";
 import { config } from "./config";
 

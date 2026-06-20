@@ -5,6 +5,7 @@ import { config } from "./config";
 import { eventsRouter } from "./routes/events";
 import { usersRouter } from "./routes/users";
 import { commentsRouter } from "./routes/comments";
+import { authRouter } from "./routes/auth";
 import { health, ping, dbTime } from "./routes/health";
 import { notFound, errorHandler } from "./middleware";
 
@@ -23,6 +24,7 @@ export function createApp() {
   app.get("/api/db/time", dbTime);
 
   // ресурсы (пути в PascalCase — как ожидает фронт; роутинг регистронезависим)
+  app.use("/api/Auth", authRouter);
   app.use("/api/Events", eventsRouter);
   app.use("/api/Users", usersRouter);
   app.use("/api/Comments", commentsRouter);
