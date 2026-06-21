@@ -2,6 +2,8 @@ import { Router } from "express";
 import { db, save, newId } from "../store";
 import { asyncHandler, HttpError } from "../middleware";
 import { eventCreateSchema, eventUpdateSchema } from "../validation";
+import { config } from "../config";
+import { getExternalEvents, findExternalEvent } from "../kudago";
 import type { Event } from "../types";
 
 export const eventsRouter = Router();
@@ -26,7 +28,8 @@ eventsRouter.get(
   "/",
   asyncHandler(async (req, res) => {
     const { search, category, date, author } = req.query as Record<string, string>;
-    let items = [...db.events];
+    const external = config.externalEvents ? await getExternalEvents() : [];
+    let items = [...db.events, ...external];
     if (search) {
       const q = search.toLowerCase();
       items = items.filter(
@@ -74,7 +77,12 @@ eventsRouter.get(
 eventsRouter.get(
   "/:id",
   asyncHandler(async (req, res) => {
-    const ev = db.events.find((e) => e.id === req.params.id);
+    let ev = db.events.find((e) => e.id === req.params.id);
+    if (!ev && config.externalEvents) {
+      ev =
+        findExternalEvent(req.params.id) ??
+        (await getExternalEvents()).find((e) => e.id === req.params.id);
+    }
     if (!ev) throw new HttpError(404, "Event not found");
     res.json(ev);
   }),
